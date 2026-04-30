@@ -1,2 +1,4 @@
 .DS_Store
 /docs/internal
+__pycache__/
+*.pyc

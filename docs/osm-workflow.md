@@ -21,6 +21,25 @@ The broader application can use these structures for maps, GPX matching, ranking
 - `scripts/admin_webgis_refresh.py`: refreshes admin units and checkpoint-region mappings
 - `sql/*.sql`: defines and populates the target PostGIS structures
 
+## Step 0: Start The Demo Database
+
+The Compose file includes a local PostGIS database for demo use:
+
+```bash
+cp .env.example .env
+docker compose -f docker-compose.osm2pgsql.yml up -d db
+```
+
+Apply the minimal application-table contract needed by the OSM workflow:
+
+```bash
+docker compose -f docker-compose.osm2pgsql.yml exec -T db \
+  psql -U postgres -d eisenbahn_demo -v ON_ERROR_STOP=1 \
+  -f /dev/stdin < sql/demo_bootstrap.sql
+```
+
+`sql/demo_bootstrap.sql` creates `t_checkpoints` and `t_intersections`. These are intentionally minimal; they support admin-unit mapping and KPI views without bringing the full private application schema into this repository.
+
 ## Step 1: Import OSM Into An Isolated Schema
 
 Use one schema per PBF extract. For example:
@@ -47,8 +66,10 @@ TARGET_DB_NAME=eisenbahn_demo \
 TARGET_DB_USER=postgres \
 TARGET_DB_PASSWORD=postgres \
 OSM_IMPORT_SCHEMA=osm_import_demo \
-PBF_PATH=/data/example.osm.pbf \
-docker compose -f docker-compose.osm2pgsql.yml run --rm osm2pgsql-import
+docker compose -f docker-compose.osm2pgsql.yml run --rm \
+  -v /absolute/path/to/extract.osm.pbf:/hostdata/input.osm.pbf:ro \
+  -e PBF_PATH=/hostdata/input.osm.pbf \
+  osm2pgsql-import
 ```
 
 ## Step 2: Build Adapter Views
@@ -64,13 +85,17 @@ docker compose -f docker-compose.osm2pgsql.yml run --rm osm2pgsql-import
 For multiple import schemas, these views are built with `UNION ALL`.
 
 ```bash
-TARGET_DB_HOST=db \
-TARGET_DB_PORT=5432 \
-TARGET_DB_NAME=eisenbahn_demo \
-TARGET_DB_USER=postgres \
-TARGET_DB_PASSWORD=postgres \
-OSM_IMPORT_SCHEMAS=osm_import_de,osm_import_at,osm_import_ch \
-python scripts/import_osm2pgsql_targets.py
+docker compose -f docker-compose.osm2pgsql.yml run --rm \
+  --entrypoint python3 \
+  -v "$PWD:/work:ro" \
+  -w /work \
+  -e TARGET_DB_HOST=db \
+  -e TARGET_DB_PORT=5432 \
+  -e TARGET_DB_NAME=eisenbahn_demo \
+  -e TARGET_DB_USER=postgres \
+  -e TARGET_DB_PASSWORD=postgres \
+  -e OSM_IMPORT_SCHEMAS=osm_import_de,osm_import_at,osm_import_ch \
+  osm2pgsql-import scripts/import_osm2pgsql_targets.py
 ```
 
 ## Step 3: Populate Target Tables
@@ -91,7 +116,20 @@ The railway import stores checkpoint preview data in two layers:
 
 This split keeps the derivation auditable.
 
-## Step 4: Refresh Admin Units
+## Step 4: Publish Preview Checkpoints For Demo Mapping
+
+The OSM import builds `t_checkpoints_preview`, but `checkpoint_admin_unit` maps active checkpoints from `t_checkpoints`. For demo runs, publish the canonical preview rows into the minimal checkpoint table:
+
+```bash
+docker compose -f docker-compose.osm2pgsql.yml exec -T db \
+  psql -U postgres -d eisenbahn_demo -v ON_ERROR_STOP=1 \
+  -f /dev/stdin < sql/demo_publish_preview_checkpoints.sql
+```
+
+This does not model GPX visits. It only makes region coverage and checkpoint-to-admin-unit mapping testable from OSM-derived data.
+Publishing replaces the demo checkpoint table, including dependent demo mappings, so run the admin refresh step after publishing.
+
+## Step 5: Refresh Admin Units
 
 `scripts/admin_webgis_refresh.py` applies `sql/admin_webgis_schema.sql` and refreshes:
 
@@ -102,12 +140,16 @@ This split keeps the derivation auditable.
 - admin-unit KPI and WebGIS views
 
 ```bash
-TARGET_DB_HOST=db \
-TARGET_DB_PORT=5432 \
-TARGET_DB_NAME=eisenbahn_demo \
-TARGET_DB_USER=postgres \
-TARGET_DB_PASSWORD=postgres \
-python scripts/admin_webgis_refresh.py
+docker compose -f docker-compose.osm2pgsql.yml run --rm \
+  --entrypoint python3 \
+  -v "$PWD:/work:ro" \
+  -w /work \
+  -e TARGET_DB_HOST=db \
+  -e TARGET_DB_PORT=5432 \
+  -e TARGET_DB_NAME=eisenbahn_demo \
+  -e TARGET_DB_USER=postgres \
+  -e TARGET_DB_PASSWORD=postgres \
+  osm2pgsql-import scripts/admin_webgis_refresh.py
 ```
 
 ## Invariants
@@ -154,4 +196,11 @@ SELECT admin_level, count(*)
 FROM public.checkpoint_admin_unit
 GROUP BY admin_level
 ORDER BY admin_level;
+```
+
+Check demo-published checkpoints:
+
+```sql
+SELECT count(*)
+FROM public.t_checkpoints;
 ```

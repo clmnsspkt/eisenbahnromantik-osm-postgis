@@ -12,8 +12,9 @@ This repository should grow in small, reviewable releases.
 ## V2: Minimal Demo Database
 
 - add a small database bootstrap for required base tables
-- add a documented sample PBF workflow
-- make the OSM workflow runnable end to end against a local PostGIS database
+- add local PostGIS service to Compose
+- document how preview checkpoints can be published into the demo checkpoint table
+- next: add a documented small PBF workflow or generated fixture
 
 ## V3: GPX Processing
 

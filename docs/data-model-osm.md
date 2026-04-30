@@ -48,6 +48,15 @@ These views allow the target import SQL to stay independent from the number of P
 
 The broader application can later decide which preview rows become active checkpoints.
 
+## Demo Application Contract
+
+`sql/demo_bootstrap.sql` creates the minimal application-side tables needed for the OSM workflow:
+
+- `t_checkpoints`: active checkpoint points in Web Mercator, keyed by `stop_id`
+- `t_intersections`: optional rider/checkpoint visit rows used by KPI views
+
+`sql/demo_publish_preview_checkpoints.sql` replaces `t_checkpoints` with canonical preview checkpoints for local demo mapping. This is not a substitute for the full GPX import workflow; it is a small bridge that lets the OSM workflow produce checkpoint-region mappings on its own.
+
 ## Region Mapping
 
 `checkpoint_admin_unit` maps checkpoints to administrative units. This enables coverage queries such as:

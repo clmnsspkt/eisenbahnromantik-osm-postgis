@@ -51,6 +51,8 @@ Raw OSM import data stays separate from application-facing tables. This makes im
     admin_webgis_refresh.py
 
   sql/
+    demo_bootstrap.sql
+    demo_publish_preview_checkpoints.sql
     admin_boundaries_schema.sql
     admin_boundaries_import_osm2pgsql.sql
     railway_checkpoints_schema.sql
@@ -63,16 +65,19 @@ Raw OSM import data stays separate from application-facing tables. This makes im
     roadmap.md
 ```
 
-## Quick Start Shape
+## Quick Start
 
-This first release is a documented workflow slice. It assumes a running PostGIS database with the extension set needed by the SQL files and, for the admin mapping step, the application checkpoint tables referenced by `sql/admin_webgis_schema.sql`.
+The Compose file includes a local PostGIS database for demo work. The repository does not include a PBF extract; provide your own small extract and mount it into the import container.
 
 ```bash
 cp .env.example .env
-docker compose -f docker-compose.osm2pgsql.yml build
+docker compose -f docker-compose.osm2pgsql.yml up -d db
+docker compose -f docker-compose.osm2pgsql.yml exec -T db \
+  psql -U postgres -d eisenbahn_demo -v ON_ERROR_STOP=1 \
+  -f /dev/stdin < sql/demo_bootstrap.sql
 ```
 
-Place a PBF extract in the Docker volume or mount path used by the import container, then run an import with an isolated schema:
+Run an import with an isolated schema. The `-v` source path must be an absolute path on your host:
 
 ```bash
 TARGET_DB_HOST=db \
@@ -81,15 +86,33 @@ TARGET_DB_NAME=eisenbahn_demo \
 TARGET_DB_USER=postgres \
 TARGET_DB_PASSWORD=postgres \
 OSM_IMPORT_SCHEMA=osm_import_demo \
-PBF_PATH=/data/example.osm.pbf \
-docker compose -f docker-compose.osm2pgsql.yml run --rm osm2pgsql-import
+docker compose -f docker-compose.osm2pgsql.yml run --rm \
+  -v /absolute/path/to/extract.osm.pbf:/hostdata/input.osm.pbf:ro \
+  -e PBF_PATH=/hostdata/input.osm.pbf \
+  osm2pgsql-import
 ```
 
 Build target tables and adapter views:
 
 ```bash
-TARGET_DB_HOST=db \
-TARGET_DB_PORT=5432 \
+docker compose -f docker-compose.osm2pgsql.yml run --rm \
+  --entrypoint python3 \
+  -v "$PWD:/work:ro" \
+  -w /work \
+  -e TARGET_DB_HOST=db \
+  -e TARGET_DB_PORT=5432 \
+  -e TARGET_DB_NAME=eisenbahn_demo \
+  -e TARGET_DB_USER=postgres \
+  -e TARGET_DB_PASSWORD=postgres \
+  -e OSM_IMPORT_SCHEMAS=osm_import_demo \
+  osm2pgsql-import scripts/import_osm2pgsql_targets.py
+```
+
+Alternatively, run the script from your host with `TARGET_DB_HOST=127.0.0.1`, `TARGET_DB_PORT=${POSTGRES_PORT:-5432}` and a Python environment that has `psycopg2` installed:
+
+```bash
+TARGET_DB_HOST=127.0.0.1 \
+TARGET_DB_PORT=${POSTGRES_PORT:-5432} \
 TARGET_DB_NAME=eisenbahn_demo \
 TARGET_DB_USER=postgres \
 TARGET_DB_PASSWORD=postgres \
@@ -97,15 +120,27 @@ OSM_IMPORT_SCHEMAS=osm_import_demo \
 python scripts/import_osm2pgsql_targets.py
 ```
 
+Publish the canonical preview checkpoints into the minimal demo checkpoint table:
+
+```bash
+docker compose -f docker-compose.osm2pgsql.yml exec -T db \
+  psql -U postgres -d eisenbahn_demo -v ON_ERROR_STOP=1 \
+  -f /dev/stdin < sql/demo_publish_preview_checkpoints.sql
+```
+
 Refresh derived admin-unit tables and mappings:
 
 ```bash
-TARGET_DB_HOST=db \
-TARGET_DB_PORT=5432 \
-TARGET_DB_NAME=eisenbahn_demo \
-TARGET_DB_USER=postgres \
-TARGET_DB_PASSWORD=postgres \
-python scripts/admin_webgis_refresh.py
+docker compose -f docker-compose.osm2pgsql.yml run --rm \
+  --entrypoint python3 \
+  -v "$PWD:/work:ro" \
+  -w /work \
+  -e TARGET_DB_HOST=db \
+  -e TARGET_DB_PORT=5432 \
+  -e TARGET_DB_NAME=eisenbahn_demo \
+  -e TARGET_DB_USER=postgres \
+  -e TARGET_DB_PASSWORD=postgres \
+  osm2pgsql-import scripts/admin_webgis_refresh.py
 ```
 
 See [docs/osm-workflow.md](docs/osm-workflow.md) for the full workflow and verification queries.
@@ -115,14 +150,14 @@ See [docs/osm-workflow.md](docs/osm-workflow.md) for the full workflow and verif
 - No bundled PBF extract is included.
 - No real GPX files, database dumps or production configuration are included.
 - The first release does not include the FastAPI backend or React frontend.
-- `admin_webgis_schema.sql` references checkpoint and intersection tables from the broader application model. A minimal demo bootstrap for those tables is planned as a later step.
+- The demo bootstrap provides only the minimal checkpoint/intersection contract needed by the OSM admin-unit mapping workflow.
 
 ## Roadmap
 
 The intended growth path is incremental:
 
 1. OSM/PostGIS workflow.
-2. Minimal demo database bootstrap.
+2. Minimal demo database bootstrap. Done for the OSM workflow slice.
 3. GPX parsing and checkpoint matching.
 4. FastAPI endpoints for checkpoint and admin-unit data.
 5. Lightweight frontend map demo.
