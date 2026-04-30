@@ -1,0 +1,25 @@
+services:
+  osm2pgsql-import:
+    build:
+      context: .
+      dockerfile: Dockerfile.osm2pgsql
+    image: eisenbahnromantik-osm2pgsql:local
+    container_name: osm2pgsql-import
+    entrypoint: ["/bin/sh", "/app/osm2pgsql_entrypoint.sh"]
+    environment:
+      TARGET_DB_HOST: ${TARGET_DB_HOST:-db}
+      TARGET_DB_PORT: ${TARGET_DB_PORT:-5432}
+      TARGET_DB_NAME: ${TARGET_DB_NAME:-eisenbahn_demo}
+      TARGET_DB_USER: ${TARGET_DB_USER:-postgres}
+      TARGET_DB_PASSWORD: ${TARGET_DB_PASSWORD:-postgres}
+      OSM_IMPORT_SCHEMA: ${OSM_IMPORT_SCHEMA:-osm_import}
+      PBF_PATH: ${PBF_PATH:-/data/example.osm.pbf}
+      OSM2PGSQL_CACHE: ${OSM2PGSQL_CACHE:-1024}
+      OSM2PGSQL_JOBS: ${OSM2PGSQL_JOBS:-4}
+    volumes:
+      - ./scripts/osm2pgsql_entrypoint.sh:/app/osm2pgsql_entrypoint.sh:ro
+      - ./osm2pgsql:/app/osm2pgsql:ro
+      - osm_pbf_data:/data:ro
+
+volumes:
+  osm_pbf_data:
