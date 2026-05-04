@@ -22,6 +22,13 @@ This repository should grow in small, reviewable releases.
 - add checkpoint matching examples
 - add tests around import fingerprints and geometry intersections
 
+## Cross-Cutting: Checkpoint Canonicalization
+
+- collect reproducible duplicate checkpoint cases from small OSM extracts
+- add diagnostic SQL for nearby candidates with similar names or shared OSM refs
+- turn duplicate cases into regression tests around `t_checkpoints_preview`
+- refine stop-area, identity, name-normalization and distance rules without depending on private production data
+
 ## V4: API Slice
 
 - add FastAPI endpoints for checkpoint and admin-unit data

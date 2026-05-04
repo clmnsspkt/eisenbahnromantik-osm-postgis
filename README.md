@@ -12,6 +12,7 @@ This public slice starts with the OSM import workflow. It explains how OSM PBF e
 - deriving administrative boundary target tables
 - deriving railway checkpoint preview tables
 - refreshing admin-unit hierarchy and checkpoint-to-region mappings
+- providing a public workbench for improving railway checkpoint canonicalization rules
 
 The workflow is intentionally scoped. It is not a full application release yet.
 
@@ -29,6 +30,19 @@ OSM PBF extract
 ```
 
 Raw OSM import data stays separate from application-facing tables. This makes imports easier to verify, rerun and extend to multiple countries or regions.
+
+## Canonicalization Workbench
+
+One goal of this repository is to make checkpoint canonicalization observable and improvable. Duplicate stations, stops or stop areas should be reduced by changing documented OSM-derived rules, not by one-off edits in the application database.
+
+The intended loop is:
+
+1. Reproduce duplicate checkpoints from a small PBF extract.
+2. Inspect `t_checkpoints_preview_raw` and `t_checkpoints_preview` to see which OSM objects survived canonicalization.
+3. Adjust the rules in `sql/railway_checkpoints_import_osm2pgsql.sql` or the parameters exposed by `scripts/import_osm2pgsql_targets.py`.
+4. Rebuild the preview tables, publish to `t_checkpoints`, and verify that the duplicate is gone without losing valid nearby checkpoints.
+
+Useful rule inputs include name normalization, stop-area membership, OSM identity refs, proximity thresholds and source priority.
 
 ## Repository Layout
 

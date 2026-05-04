@@ -48,6 +48,31 @@ These views allow the target import SQL to stay independent from the number of P
 
 The broader application can later decide which preview rows become active checkpoints.
 
+## Checkpoint Canonicalization
+
+Canonicalization is intentionally part of the public OSM workflow. The purpose is to turn many overlapping OSM objects for the same real-world railway location into one auditable checkpoint candidate.
+
+The current rules use:
+
+- normalized checkpoint names and match keys
+- public-transport `stop_area` relations and members
+- OSM identity tags such as `wikidata`, `uic_ref` and `ifopt_ref`
+- source priority for stations, halts, stops, platforms and stop positions
+- distance-based clustering and stop-area swallowing thresholds
+
+The rule output remains inspectable because raw candidates stay in `t_checkpoints_preview_raw` and canonical candidates stay in `t_checkpoints_preview`. When duplicate checkpoints appear downstream, use these two tables to identify whether the duplication came from missing stop-area membership, overly strict name matching, distance thresholds, or source-priority ranking.
+
+Rule parameters are configured through environment variables consumed by `scripts/import_osm2pgsql_targets.py`, including:
+
+- `CHECKPOINT_CLUSTER_RADIUS_M`
+- `CHECKPOINT_STOPAREA_SWALLOW_RADIUS_M`
+- `CHECKPOINT_STOPAREA_LINK_RADIUS_M`
+- `CHECKPOINT_STOPAREA_DEDUP_GRID_M`
+- `CHECKPOINT_NAME_STRIP_PARENS`
+- `CHECKPOINT_KEEP_TIEF_VARIANTS`
+- `CHECKPOINT_STRICT_RAIL_ONLY`
+- `CHECKPOINT_EXCLUDE_TRAM_STOPS`
+
 ## Demo Application Contract
 
 `sql/demo_bootstrap.sql` creates the minimal application-side tables needed for the OSM workflow:
